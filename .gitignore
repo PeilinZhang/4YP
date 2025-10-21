@@ -1,0 +1,22 @@
+# Ignore Python virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Ignore typical Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+build/
+dist/
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore VS Code and system files
+.vscode/
+.DS_Store
