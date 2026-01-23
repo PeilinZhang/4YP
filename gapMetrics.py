@@ -76,6 +76,24 @@ def ss_to_tf_discrete(A, B, C, D):
 
     return num, den
 
+def eval_tf(num, den, z):
+    """
+    Evaluate a MIMO transfer function matrix P(z) at a complex point z.
+
+    num: array of shape (p, m), each entry is a 1D array of numerator coeffs
+    den: 1D array of denominator coeffs
+    z: complex scalar (e^{jω} in discrete-time)
+
+    Returns: P(z) as a (p, m) complex ndarray.
+    """
+    p, m = num.shape
+    P = np.zeros((p, m), dtype=complex)
+    den_val = np.polyval(den, z)
+    for i in range(p):
+        for j in range(m):
+            P[i, j] = np.polyval(num[i, j], z) / den_val
+    return P
+
 #1.2 Generate Hankel matrix
 def persistently_exciting_input(T, m=1, std=1.0):
     """
@@ -159,6 +177,37 @@ def principal_angles(H1, H2, return_degrees=False):
 
     return angles  # sorted from smallest to largest
 
+#for v gap
+def inv_sqrt_hermitian(M, eps=1e-12):
+    lam, V = np.linalg.eigh(M)
+    lam_clipped = np.clip(lam, eps, None)
+    D_inv_sqrt = np.diag(1.0 / np.sqrt(lam_clipped))
+    return V @ D_inv_sqrt @ V.conj().T
+
+def L_mat(P1,P2):
+    p, m = P1.shape
+    I_p = np.eye(p, dtype=complex)
+    return inv_sqrt_hermitian(I_p + P1 @ P2.conj().T)
+
+def R_mat(P1,P2):
+    p, m = P1.shape
+    I_m = np.eye(m, dtype=complex)
+    return inv_sqrt_hermitian(I_m + P1.conj().T @ P2)
+
+def G_star_G(P1, P2):
+    p, m = P1.shape
+    R1 = R_mat(P1, P1)
+    R2 = R_mat(P2, P2)
+    middle = np.eye(m, dtype=complex) + P2.conj().T @ P1
+    return R1.conj().T @ middle @ R2
+
+def winding_number(det_vals):
+    # Argument at each sample
+    angles = np.unwrap(np.angle(det_vals))
+    # Net change in angle over the loop
+    dtheta = angles[-1] - angles[0]
+    return int(np.round(dtheta / (2 * np.pi)))
+
 def Lgap_metric(A, B):
     """
     Compute gap(U,V) for subspaces U=span(A), V=span(B),
@@ -176,3 +225,88 @@ def Lgap_metric(A, B):
     gap_value = np.sin(theta_max)
 
     return gap_value, theta_max
+
+def vgap_metric(num1, den1, num2, den2):
+    """
+    Compute v-gap
+    """
+    n_freq = 1000
+    eps_det=1e-6
+    omegas = np.linspace(-np.pi, np.pi, n_freq)
+    v_r = 0.0
+    det_vals = []
+    for w in omegas:
+        z = np.exp(1j * w)
+        P1 = eval_tf(num1, den1, z)
+        P2 = eval_tf(num2, den2, z)
+        p, m = P1.shape
+        # --- a_v part: || L(P2) (P2 - P1) R(P1) ||_2 ---
+        L2 = L_mat(P2,P2)
+        R1 = R_mat(P1,P1)
+        M = L2 @ (P2 - P1) @ R1   # p x m
+        # spectral norm (largest singular value)
+        v_r = max(v_r, np.linalg.norm(M, 2))
+        # --- winding-number part: det(G1^* G2) ---
+        G1G2_star = G_star_G(P1, P2)
+        det_val = np.linalg.det(G1G2_star)
+        det_vals.append(det_val)
+    det_vals = np.array(det_vals)
+    # Check det != 0 everywhere on the grid
+    if np.min(np.abs(det_vals)) < eps_det:
+        return 1.0, v_r
+    # Approximate winding number of det(G1^* G2)
+    wno = winding_number(det_vals)
+    if wno != 0:
+        return 1.0, v_r
+    return float(v_r), v_r
+
+#for bound
+#find v gap boundary, controller transfer function is needed
+def vgap_bpc(P_num, P_den, C_num, C_den):
+    """
+    Approximate b_{P,C} = 1 / || [P; I] (I - C P)^(-1) [-C  I] ||_inf
+    by frequency sampling on the unit circle.
+    P is the transfer function of the plant,
+    C is the transfer function of the controller.
+
+    Returns:
+      b_pc, hinf_approx, w_peak
+    """
+    n_freq = 2000
+    eps=1e-12
+    p, m = P_num.shape
+    mC_out, pC_in = C_num.shape
+    if (mC_out, pC_in) != (m, p):
+        raise ValueError(f"Expected C to be shape (m,p)=({m},{p}), got {C_num.shape}")
+    I_m = np.eye(m, dtype=complex)
+    # frequency grid
+    ws = np.linspace(0, np.pi, n_freq)  # discrete-time: [0, pi] is enough
+    peak_sigma = -np.inf
+    w_peak = None
+    for w in ws:
+        z = np.exp(1j * w)
+        P = eval_tf(P_num, P_den, z)   # (p,m)
+        C = eval_tf(C_num, C_den, z)   # (m,p)
+        # Compute S = (I - C P)^(-1)
+        Mmid = I_m - C @ P
+        # protect against near-singular frequency points
+        if np.linalg.cond(Mmid) > 1/eps:
+            # treat as extremely large gain -> dominates hinf
+            sigma_max = np.inf
+        else:
+            S = np.linalg.inv(Mmid)  # (m,m)
+
+            # Build blocks: [P; I_m] and [-C  I_m]
+            left = np.vstack([P, I_m])                 # (p+m, m)
+            right = np.hstack([-C, I_m])               # (m, p+m)
+
+            M = left @ S @ right                       # (p+m, p+m)
+
+            # largest singular value
+            sigma_max = np.linalg.svd(M, compute_uv=False)[0]
+        if sigma_max > peak_sigma:
+            peak_sigma = sigma_max
+            w_peak = w
+    hinf_approx = peak_sigma
+    b_pc = 1.0 / hinf_approx if np.isfinite(hinf_approx) and hinf_approx > 0 else 0.0
+    return b_pc, hinf_approx, w_peak
