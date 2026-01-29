@@ -278,3 +278,65 @@ def set_params(**kwargs):
         else:
             raise KeyError(f"Parameter '{key}' not found in parameters dictionary.")
     return p
+
+
+
+
+# A set of functions for simpler system
+def input_func(u, form = "activation" ,params = None):
+    # # Hill function
+    # if form == "activation":
+    #     u = alpha * u**n / (Kn**n + u**n)
+    # elif form == "repression":
+    #     u = alpha * Ku**n / (Ku**n + u**n)
+    return u
+
+def default_params_2(): 
+    params = {} #parameters dictionary
+    params['km'] = 0.7
+    params['kM'] = 0.7
+    params['deltam'] = 0.07
+    params['deltaM'] = 0.03
+    # #Hill function parameters
+    # params['alpha'] = 1.0
+    # params['n'] = 2.0
+    # params['Kn'] = 0.5
+    # params['Ku'] = 0.5
+    return params
+
+def model_dynamics(x, u, params):
+    m = x[0]
+    M = x[1]
+    km = params['km']
+    kM = params['kM']
+    deltam = params['deltam']
+    deltaM = params['deltaM']
+    # u = input_func(u, form="activation", params=params)
+    
+    dm_dt = km + u - deltam * m
+    dM_dt = kM * m - deltaM * M
+    
+    dxdt = np.array([dm_dt, dM_dt])
+    return dxdt
+
+def discretize_AB(delta_m, delta_M, T):
+    """
+    also normalised; x1 = m/km, x1 = M/(kM*km), u = 1+u/km
+    then the model becomes:
+    dxdt = [-deltam 0; 1 -deltaM]x + [1;0]u
+    then discretise using ZOH with sample time T
+    """
+    em = np.exp(-delta_m * T)
+    eM = np.exp(-delta_M * T)
+
+    Ad = np.array([
+        [em, 0.0],
+        [(em - eM) / (delta_M - delta_m), eM]
+    ])
+
+    Bd = np.array([
+        [(1 - em) / delta_m],
+        [((1 - em) / delta_m - (1 - eM) / delta_M) / (delta_M - delta_m)]
+    ])
+
+    return Ad, Bd

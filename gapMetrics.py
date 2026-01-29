@@ -208,7 +208,7 @@ def winding_number(det_vals):
     dtheta = angles[-1] - angles[0]
     return int(np.round(dtheta / (2 * np.pi)))
 
-def Lgap_metric(A, B):
+def Lgap_metric_p(A, B):
     """
     Compute gap(U,V) for subspaces U=span(A), V=span(B),
     assuming dim(U) = dim(V) and both have the same rank.
@@ -225,6 +225,46 @@ def Lgap_metric(A, B):
     gap_value = np.sin(theta_max)
 
     return gap_value, theta_max
+
+def svd_basis(H, tol_rel=1e-10):
+    U, s, Vt = np.linalg.svd(H, full_matrices=False)
+    tol = tol_rel * s[0]
+    r = int(np.sum(s > tol))
+    return U, s, Vt, r
+
+def hankel_svd_blocks(H, l, tol_rel=1e-10):
+    U, s, Vt, r = svd_basis(H, tol_rel=tol_rel)
+    # cap l by numerical rank and matrix size
+    l = int(min(l, r, U.shape[1]))
+    U1 = U[:, :l]
+    U2 = U[:, l:]
+    return U1, U2, s, Vt, r, l
+
+def Lgap_metric(H1, H2, m, n, L, use_alt_formula=False, tol_rel=1e-10):
+    # theoretical behavior dimension
+    l_theory = m*L + n
+
+    # numerical ranks (relative tol)
+    _, _, _, r1 = svd_basis(H1, tol_rel=tol_rel)
+    _, _, _, r2 = svd_basis(H2, tol_rel=tol_rel)
+
+    # usable behavior dimension (must be same for both!)
+    l = int(min(l_theory, r1, r2))
+
+    U1, U2, _, _, _, l1 = hankel_svd_blocks(H1, l=l, tol_rel=tol_rel)
+    U1_t, U2_t, _, _, _, l2 = hankel_svd_blocks(H2, l=l, tol_rel=tol_rel)
+    # l1 == l2 == l unless ranks were 0
+
+    if use_alt_formula:
+        # use the symmetric equivalent form
+        M = U1_t.T @ U1
+        gap = np.linalg.norm(M, 2)
+    else:
+        P1 = U1 @ U1.T
+        P2 = U1_t @ U1_t.T
+        gap = np.linalg.norm(P1 - P2, 2)
+
+    return gap, l, r1, r2
 
 def vgap_metric(num1, den1, num2, den2):
     """
@@ -310,3 +350,42 @@ def vgap_bpc(P_num, P_den, C_num, C_den):
     hinf_approx = peak_sigma
     b_pc = 1.0 / hinf_approx if np.isfinite(hinf_approx) and hinf_approx > 0 else 0.0
     return b_pc, hinf_approx, w_peak
+
+
+
+#For finding p_bc
+#from X and U to A and B
+def estimate_AB(U, X):
+    """
+      - U: shape (m, T)   contains u_d(0), ..., u_d(T-1) as columns
+      - X: shape (n, T+1) contains x_d(0), ..., x_d(T)   as columns
+    Constructs:
+      U0_1_T = U[:, 0:T]
+      X0_T   = X[:, 0:T]
+      X1_T   = X[:, 1:T+1]
+    Returns:
+      A_hat: (n, n)
+      B_hat: (n, m)
+    """
+    U = np.asarray(U)
+    X = np.asarray(X)
+    m, T = U.shape
+    n, Tp1 = X.shape
+    if Tp1 != T + 1:
+        raise ValueError(f"X must have T+1 columns. Got U has T={T}, X has {Tp1} columns.")
+    
+    U0_1_T = U                          # (m, T)
+    X0_T   = X[:, :-1]                  # (n, T)
+    X1_T   = X[:, 1:]                   # (n, T)
+
+    S = np.vstack([U0_1_T, X0_T])
+
+    # Right-inverse / LS solution:
+    # [B A] = argmin_{M} ||X1_T - M S||_F  (paper eq. (10))
+    # One convenient solution: M = X1_T * pinv(S)
+    S_dag = np.linalg.pinv(S, rcond=1e-12)   # (T, m+n)
+    BA_hat = X1_T @ S_dag                    # (n, m+n)
+
+    B_hat = BA_hat[:, :m]
+    A_hat = BA_hat[:, m:]
+    return A_hat, B_hat
