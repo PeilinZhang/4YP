@@ -91,6 +91,9 @@ def eval_tf(num, den, z):
     den_val = np.polyval(den, z)
     for i in range(p):
         for j in range(m):
+            # print("Evaluating TF at z =", z, "for output", i, "input", j)
+            # print("Numerator coeffs:", num[i, j])
+            # print("Denominator coeffs:", den_val)
             P[i, j] = np.polyval(num[i, j], z) / den_val
     return P
 
