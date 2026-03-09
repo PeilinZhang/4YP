@@ -1,7 +1,7 @@
 import numpy as np                        # For linear algebra
 import cvxpy as cp
 import matplotlib.pyplot as plt            # For plots
-from scipy.signal import ss2tf
+from scipy.signal import ss2tf, tf2ss
 # np.random.seed(1)                          # Generate random seed
 # np.set_printoptions(precision=1)           # Set nice printing format
 
@@ -392,3 +392,22 @@ def estimate_AB(U, X):
     B_hat = BA_hat[:, :m]
     A_hat = BA_hat[:, m:]
     return A_hat, B_hat
+
+def random_discrete_system_stable(n=2, m=1, p=1, max_tries=2000, rho_target=0.5):
+    for _ in range(max_tries):
+        A = np.random.randn(n, n)
+        # scale to target spectral radius
+        eigs = np.linalg.eigvals(A)
+        rho = np.max(np.abs(eigs))
+        if rho == 0:
+            continue
+        # if rho > 1.0:
+        A = (rho_target / rho) * A
+
+        B = np.random.randn(n, m)
+        C = np.random.randn(p, n)
+        D = np.zeros((p, m))
+
+        if is_controllable(A, B) and is_observable(A, C):
+            return A, B, C, D
+    raise RuntimeError("Failed to find controllable & observable stable system.")
