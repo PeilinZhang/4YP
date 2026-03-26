@@ -293,16 +293,23 @@ def input_func(u, form = "activation" ,params = None):
 
 def default_params_2(): 
     params = {} #parameters dictionary
-    params['km'] = 0.7
-    params['kM'] = 0.7
-    params['deltam'] = 0.07
-    params['deltaM'] = 0.03
+    params['km'] = 1.3
+    params['kM'] = 1.0
+    params['deltam'] = 0.14
+    params['deltaM'] = 0.02
     # #Hill function parameters
     # params['alpha'] = 1.0
     # params['n'] = 2.0
     # params['Kn'] = 0.5
     # params['Ku'] = 0.5
     return params
+
+def random_parameters_2():
+    set_params = default_params_2()
+    for key in set_params:
+        set_params[key] = np.random.uniform(0.5*set_params[key], 1.5*set_params[key])
+    return set_params
+
 
 def model_dynamics(x, u, params):
     m = x[0]
@@ -311,7 +318,7 @@ def model_dynamics(x, u, params):
     kM = params['kM']
     deltam = params['deltam']
     deltaM = params['deltaM']
-    # u = input_func(u, form="activation", params=params)
+    u = input_func(u, form="activation", params=params)
     
     dm_dt = km + u - deltam * m
     dM_dt = kM * m - deltaM * M
