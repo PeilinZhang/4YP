@@ -269,6 +269,29 @@ def Lgap_metric(H1, H2, m, n, L, use_alt_formula=False, tol_rel=1e-10):
 
     return gap, l, r1, r2
 
+def Lgap_metric_pair(num_systems, stored_hankels, m, n, L, tol_rel=1e-10):
+    "SVD result is computed only once"
+    D_p = np.zeros((num_systems, num_systems))
+    # Q_list = []
+    P_list = []
+    for i in range(num_systems):
+        U, s, Vt, r = svd_basis(stored_hankels[i])
+        l = min(m*L + n, r)
+        if (m*L + n) != r:
+            print(f"Warning: system {i} has numerical rank {r} != theoretical behavior dimension {m*L+n}..")
+        # Q_list.append(U[:, :l])
+        P = U[:, :l] @ U[:, :l].T
+        P_list.append(P)
+    # Pairwise gap
+    for i in range(num_systems):
+        for j in range(i+1, num_systems):
+            P1 = P_list[i]
+            P2 = P_list[j]
+            D_p[i, j] = np.linalg.norm(P1 - P2, 2)
+            D_p[j, i] = D_p[i, j]
+
+    return D_p
+
 def vgap_metric(num1, den1, num2, den2):
     """
     Compute v-gap

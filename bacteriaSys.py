@@ -298,10 +298,11 @@ def default_params_2():
     params['deltam'] = 0.14
     params['deltaM'] = 0.02
     # #Hill function parameters
-    # params['alpha'] = 1.0
-    # params['n'] = 2.0
+    params['alpha'] = 1.0
+    params['n'] = 2.0
     # params['Kn'] = 0.5
     # params['Ku'] = 0.5
+    params['K_f'] = 1.0
     return params
 
 def random_parameters_2():
@@ -347,3 +348,36 @@ def discretize_AB(delta_m, delta_M, T):
     ])
 
     return Ad, Bd
+
+from scipy.signal import cont2discrete
+
+def generate_discrete_state_space(gamma_m, gamma_M, alpha, n, K_f, T=1/6):
+    """
+    Continuous-time system:
+        x_dot = A x + B u
+        y     = C x + D u
+
+    Discretised using zero-order hold with sampling time T hours.
+    """
+
+    A = np.array([
+        [-gamma_m, 0.0],
+        [1.0, -gamma_M]
+    ], dtype=float)
+
+    B = np.array([
+        [alpha * n / (4.0 * K_f)],
+        [0.0]
+    ], dtype=float)
+
+    C = np.eye(2)
+
+    D = np.zeros((2, 1))
+
+    Ad, Bd, Cd, Dd, dt = cont2discrete(
+        (A, B, C, D),
+        dt=T,
+        method="zoh"
+    )
+
+    return Ad, Bd, Cd, Dd
