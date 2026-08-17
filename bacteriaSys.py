@@ -298,7 +298,7 @@ def default_params_2():
     params['deltam'] = 0.14
     params['deltaM'] = 0.02
     # #Hill function parameters
-    params['alpha'] = 1.0
+    params['alpha'] = 1.3
     params['n'] = 2.0
     # params['Kn'] = 0.5
     # params['Ku'] = 0.5
@@ -351,7 +351,7 @@ def discretize_AB(delta_m, delta_M, T):
 
 from scipy.signal import cont2discrete
 
-def generate_discrete_state_space(gamma_m, gamma_M, alpha, n, K_f, T=1/6):
+def generate_discrete_state_space(gamma_m, gamma_M, k_M, alpha, n, K_f, T=1/6):
     """
     Continuous-time system:
         x_dot = A x + B u
@@ -362,7 +362,7 @@ def generate_discrete_state_space(gamma_m, gamma_M, alpha, n, K_f, T=1/6):
 
     A = np.array([
         [-gamma_m, 0.0],
-        [1.0, -gamma_M]
+        [k_M, -gamma_M]
     ], dtype=float)
 
     B = np.array([

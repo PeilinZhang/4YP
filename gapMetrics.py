@@ -149,6 +149,68 @@ def hankel_matrix(data, L):
         H[i*d:(i+1)*d, :] = data[i:i+cols].T
     return H
 
+def graph_matrix(A, B, C, D, u, L):
+    """
+    Construct a finite-horizon graph data matrix.
+
+    Each column corresponds to a length-L trajectory
+    generated from zero initial condition.
+
+    The input columns are taken from H_L(u), so if u is
+    persistently exciting of order L, the input part has
+    rank m*L.
+
+    Returns
+    -------
+    G : array, shape ((m+p)*L, T-L+1)
+        Graph data matrix [H_u; H_y_zero]
+
+    H_u : array, shape (m*L, T-L+1)
+        Input Hankel matrix.
+
+    H_y_zero : array, shape (p*L, T-L+1)
+        Output matrix where every column is generated
+        independently from x0 = 0.
+    """
+
+    u = np.asarray(u)
+
+    T, m = u.shape
+    n = A.shape[0]
+    p = C.shape[0]
+
+    # PE input Hankel matrix
+    H_u = hankel_matrix(u, L)
+
+    num_cols = H_u.shape[1]
+
+    # Output part of the graph matrix
+    H_y_zero = np.zeros((p * L, num_cols))
+
+    # Explicit zero initial condition
+    x0 = np.zeros((n, 1))
+
+    for j in range(num_cols):
+
+        # j-th length-L input trajectory
+        u_j = H_u[:, j].reshape(L, m)
+
+        # every simulation starts again from x0 = 0
+        _, y_j = simulate_system(
+            A, B, C, D,
+            u_j,
+            x0=x0
+        )
+
+        # Put complete length-L output trajectory
+        # into one column
+        H_y_zero[:, j] = y_j.reshape(-1)
+
+    # Graph matrix
+    G = np.vstack((H_u, H_y_zero))
+
+    return G, H_u, H_y_zero
+
 #2.3 principal angles
 # Guide for principal angle code https://pyphysim.readthedocs.io/en/latest/_modules/pyphysim/subspace/metrics.html
 def principal_angles(H1, H2, return_degrees=False):
